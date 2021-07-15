@@ -53,7 +53,7 @@ namespace KTech {
 
 		int image_quality = 100;
 
-		Magick::FilterTypes filter = Magick::LanczosFilter;
+		Magick::FilterType filter = Magick::LanczosFilter;
 
 		bool no_premultiply = false;
 
@@ -124,7 +124,7 @@ namespace KTech {
 			}
 		};
 
-		class FilterTypeTranslator : public StrOptTranslator<Magick::FilterTypes> {
+		class FilterTypeTranslator : public StrOptTranslator<Magick::FilterType> {
 		public:
 			FilterTypeTranslator() {
 				using namespace Magick;

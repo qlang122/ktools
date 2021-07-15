@@ -15,3 +15,9 @@ local/**
 *.zip
 releases
 releases/*
+
+config.h
+ktools.cbp
+
+/CMakeFiles
+/cmake-build-debug
