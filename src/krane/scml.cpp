@@ -287,8 +287,8 @@ namespace {
 
         AnimationMetadata(xml_node _animation) : animation(_animation) {}
 
-        AnimationSymbolMetadata &
-        initializeChild(uint32_t &current_timeline_id, uint32_t start_time, const KAnim::Frame::Element &elem) {
+        AnimationSymbolMetadata &initializeChild(uint32_t &current_timeline_id, uint32_t start_time,
+                                                 const KAnim::Frame::Element &elem) {
             const int dupeness = int(elemhash_mset.count(elem.getHash()));
 
             symbolmeta_list &L = (*this)[&elem];
@@ -330,21 +330,21 @@ namespace {
 /***********************************************************************/
 
 
-static void exportBuild(xml_node spriter_data, BuildMetadata &bmeta, const KBuild &bild);
+static void
+exportBuild(xml_node spriter_data, BuildMetadata &bmeta, BuildExporterState &s, const KBuild &bild);
 
-static void exportBuildSymbol(xml_node spriter_data, BuildExporterState &s, BuildSymbolMetadata &symmeta,
-                              const KBuild::Symbol &sym);
+static void
+exportBuildSymbol(xml_node spriter_data, BuildExporterState &s, BuildSymbolMetadata &symmeta,
+                  const KBuild::Symbol &sym);
 
 static void exportBuildSymbolFrame(xml_node folder, BuildSymbolExporterState &s, BuildSymbolFrameMetadata &framemeta,
                                    const KBuild::Symbol::Frame &frame);
 
+static void exportAnimationBankCollection(xml_node spriter_data, const BuildMetadata &bmeta,
+                                          const KAnimBankCollection &C);
 
-static void
-exportAnimationBankCollection(xml_node spriter_data, const BuildMetadata &bmeta, const KAnimBankCollection &C);
-
-static void
-exportAnimationBank(xml_node spriter_data, AnimationBankCollectionExporterState &s, const BuildMetadata &bmeta,
-                    const KAnimBank &B);
+static void exportAnimationBank(xml_node spriter_data, AnimationBankCollectionExporterState &s,
+                                const BuildMetadata &bmeta, const KAnimBank &B);
 
 static void exportAnimation(xml_node entity, AnimationBankExporterState &s, const BuildMetadata &bmeta, const KAnim &A);
 
@@ -358,6 +358,9 @@ exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &
 static void
 exportAnimationSymbolTimeline(const BuildSymbolMetadata &symmeta, const AnimationSymbolMetadata &animsymmeta);
 
+
+static void checkNonExistBuildSymbolFrame(xml_node spriter_data, BuildMetadata &bmeta,
+                                          BuildExporterState &s, const KAnimBankCollection &C);
 
 /***********************************************************************/
 
@@ -377,13 +380,10 @@ void Krane::exportToSCML(std::ostream &out, const KBuild &bild, const KAnimBankC
     spriter_data.append_attribute("generator_version") = "b5";
 
     BuildMetadata bmeta;
-    exportBuild(spriter_data, bmeta, bild);
+    BuildExporterState local_s;
+    exportBuild(spriter_data, bmeta, local_s, bild);
 
-//    cout << "build items --->>" << endl;
-//    for (BuildMetadata::const_iterator matht = bmeta.begin(); matht != bmeta.end(); ++matht) {
-//        cout << " " << matht->second.symbol->getName();
-//    }
-//    cout << endl;
+    checkNonExistBuildSymbolFrame(spriter_data, bmeta, local_s, banks);
 
     exportAnimationBankCollection(spriter_data, bmeta, banks);
 
@@ -392,30 +392,31 @@ void Krane::exportToSCML(std::ostream &out, const KBuild &bild, const KAnimBankC
 
 /***********************************************************************/
 
-static void exportBuild(xml_node spriter_data, BuildMetadata &bmeta, const KBuild &bild) {
+static void
+exportBuild(xml_node spriter_data, BuildMetadata &bmeta, BuildExporterState &s, const KBuild &bild) {
     typedef KBuild::symbolmap_const_iterator symbolmap_iterator;
-
-    BuildExporterState local_s;
 
     for (symbolmap_iterator it = bild.symbols.begin(); it != bild.symbols.end(); ++it) {
         hash_t h = it->first;
         const KBuild::Symbol &sym = it->second;
-        exportBuildSymbol(spriter_data, local_s, bmeta[h], sym);
+        exportBuildSymbol(spriter_data, s, bmeta[h], sym);
     }
 }
 
-static void exportBuildSymbol(xml_node spriter_data, BuildExporterState &s, BuildSymbolMetadata &symmeta,
-                              const KBuild::Symbol &sym) {
+static void
+exportBuildSymbol(xml_node spriter_data, BuildExporterState &s, BuildSymbolMetadata &symmeta,
+                  const KBuild::Symbol &sym) {
     typedef KBuild::frame_const_iterator frame_iterator;
 
     const uint32_t folder_id = s.folder_id++;
 
     //cout << "Exporting build symbol " << sym.getName() << endl;
 
+    const char *name = sym.getUnixPath().c_str();
     xml_node folder = spriter_data.append_child("folder");
 
     folder.append_attribute("id") = folder_id;
-    folder.append_attribute("name") = sym.getUnixPath().c_str();
+    folder.append_attribute("name") = name;
 
     BuildSymbolExporterState local_s;
 
@@ -445,6 +446,8 @@ static void exportBuildSymbolFrame(xml_node folder, BuildSymbolExporterState &s,
     y = bbox.y();
     w = bbox.int_w();
     h = bbox.int_h();
+    if (w == 0)w = 1;
+    if (h == 0)h = 1;
 
     float_type pivot_x = 0.5 - x / w;
     float_type pivot_y = 0.5 + y / h;
@@ -464,10 +467,46 @@ static void exportBuildSymbolFrame(xml_node folder, BuildSymbolExporterState &s,
     file.append_attribute("pivot_y") = pivot_y;
 }
 
+static void checkNonExistBuildSymbolFrame(xml_node spriter_data, BuildMetadata &bmeta,
+                                          BuildExporterState &s, const KAnimBankCollection &C) {
+    DataFormatter fmt;
+    if (!C.empty()) {
+        const KAnimBank &B = *C.begin()->second;
+        if (!B.empty()) {
+            const KAnim &A = *B.begin()->second;
+            if (!A.frames.empty()) {
+                const KAnim::Frame &frame = A.frames.back();
+
+                for (KAnim::Frame::elementlist_t::const_iterator elemit = frame.elements.begin();
+                     elemit != frame.elements.end(); ++elemit) {
+                    const KAnim::Frame::Element &elem = *elemit;
+//                    cout << "------>" << elem.getName() << " " << elem.getHash() << endl;
+                    hash_t h = elem.getHash();
+                    BuildMetadata::const_iterator symmeta_match = bmeta.find(h);
+                    if (symmeta_match == bmeta.end()) {//过滤不存在的贴图引用
+                        KBuild::Symbol sym;
+                        sym.setHash(h);
+                        sym.name = elem.getName();
+//                        sym.frames.resize(4);
+//                        for (int i = 0; i < 4; i++) {
+//                            KBuild::Symbol::Frame &frm = sym.frames[i];
+//                            frm.setParent(&sym);
+//                            frm.setFrameNumber(i);
+//                        }
+//                        sym.update_framenumbermap();
+//                        cout << "checkNonExistBuild-------->" << elem.getName() << endl;
+                        exportBuildSymbol(spriter_data, s, bmeta[h], sym);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /***********************************************************************/
 
-static void
-exportAnimationBankCollection(xml_node spriter_data, const BuildMetadata &bmeta, const KAnimBankCollection &C) {
+static void exportAnimationBankCollection(xml_node spriter_data, const BuildMetadata &bmeta,
+                                          const KAnimBankCollection &C) {
     AnimationBankCollectionExporterState local_s;
     for (KAnimBankCollection::const_iterator bankit = C.begin(); bankit != C.end(); ++bankit) {
         const KAnimBank &B = *bankit->second;
@@ -475,15 +514,15 @@ exportAnimationBankCollection(xml_node spriter_data, const BuildMetadata &bmeta,
     }
 }
 
-static void
-exportAnimationBank(xml_node spriter_data, AnimationBankCollectionExporterState &s, const BuildMetadata &bmeta,
-                    const KAnimBank &B) {
+static void exportAnimationBank(xml_node spriter_data, AnimationBankCollectionExporterState &s,
+                                const BuildMetadata &bmeta, const KAnimBank &B) {
     const uint32_t entity_id = s.entity_id++;
 
+    const char *name = B.getName().c_str();
     xml_node entity = spriter_data.append_child("entity");
 
     entity.append_attribute("id") = entity_id;
-    entity.append_attribute("name") = B.getName().c_str();
+    entity.append_attribute("name") = name;
 
     AnimationBankExporterState local_s;
     for (KAnimBank::const_iterator animit = B.begin(); animit != B.end(); ++animit) {
@@ -555,8 +594,8 @@ static void exportAnimationFrame(xml_node mainline, AnimationExporterState &s, A
     for (KAnim::Frame::elementlist_t::const_iterator elemit = frame.elements.begin();
          elemit != frame.elements.end(); ++elemit) {
         const KAnim::Frame::Element &elem = *elemit;
-//        cout << "---->>>" << elem.getName() << " " << elem.getHash() << endl;
         BuildMetadata::const_iterator symmeta_match = bmeta.find(elem.getHash());
+//        cout << "---->>>" << elem.getName() << " " << elem.getHash() << " " << (symmeta_match == bmeta.end()) << endl;
         if (symmeta_match == bmeta.end()) {//过滤不存在的贴图引用
             continue;
         }
@@ -591,7 +630,8 @@ exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &
         s.last_sort_order = sort_order;
     }
 
-    //cout << "Exporting animation frame element " << elem.getName() << ", build frame " << elem.getBuildFrame() << ", key id " << animsymmeta.getTimelineId() << endl;
+//    cout << "Exporting animation frame element " << elem.getName() << ", build frame " << elem.getBuildFrame()
+//         << ", key id " << animsymmeta.getTimelineId() << endl;
 
 
     xml_node object_ref = mainline_key.append_child("object_ref");
@@ -604,14 +644,14 @@ exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &
     object_ref.append_attribute("folder") = symmeta.folder_id;
     object_ref.append_attribute("file") = build_frame; // This is where deduplication would need to be careful.
     */
-    object_ref.append_attribute("abs_x") = 0;
-    object_ref.append_attribute("abs_y") = 0;
-    object_ref.append_attribute("abs_pivot_x") = bframemeta.pivot_x;//*MODTOOLS_SCALE;
-    object_ref.append_attribute("abs_pivot_y") = bframemeta.pivot_y;//*MODTOOLS_SCALE;
-    object_ref.append_attribute("abs_angle") = 0; // 360?
-    object_ref.append_attribute("abs_scale_x") = 1;
-    object_ref.append_attribute("abs_scale_y") = 1;
-    object_ref.append_attribute("abs_a") = 1;
+//    object_ref.append_attribute("abs_x") = 0;
+//    object_ref.append_attribute("abs_y") = 0;
+//    object_ref.append_attribute("abs_pivot_x") = bframemeta.pivot_x;//*MODTOOLS_SCALE;
+//    object_ref.append_attribute("abs_pivot_y") = bframemeta.pivot_y;//*MODTOOLS_SCALE;
+//    object_ref.append_attribute("abs_angle") = 0; // 360?
+//    object_ref.append_attribute("abs_scale_x") = 1;
+//    object_ref.append_attribute("abs_scale_y") = 1;
+//    object_ref.append_attribute("abs_a") = 1;
     object_ref.append_attribute("timeline") = animsymmeta.getTimelineId();
     object_ref.append_attribute("key") = animsymmeta.getKeyId();//build_frame; // This changed for deduplication.
     object_ref.append_attribute("z_index") = z_index;
