@@ -637,7 +637,7 @@ exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &
     xml_node object_ref = mainline_key.append_child("object_ref");
 
     object_ref.append_attribute("id") = object_ref_id;
-    object_ref.append_attribute("name") = elem.getName().c_str();
+//    object_ref.append_attribute("name") = elem.getName().c_str();
     /*
      * These are now defined only in the <object> within the timeline.
      *
