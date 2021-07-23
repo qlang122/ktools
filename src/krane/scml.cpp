@@ -377,7 +377,7 @@ void Krane::exportToSCML(std::ostream &out, const KBuild &bild, const KAnimBankC
 
     spriter_data.append_attribute("scml_version") = "1.0";
     spriter_data.append_attribute("generator") = "BrashMonkey Spriter";
-    spriter_data.append_attribute("generator_version") = "b5";
+    spriter_data.append_attribute("generator_version") = "r7";
 
     BuildMetadata bmeta;
     BuildExporterState local_s;
@@ -590,7 +590,7 @@ static void exportAnimationFrame(xml_node mainline, AnimationExporterState &s, A
 
     //cout << "Exporting animation frame " << key_id << endl;
 
-    AnimationFrameExporterState local_s(key_id, 0/*int(frame.elements.size())*/);
+    AnimationFrameExporterState local_s(key_id, int(frame.elements.size()));
 
     vector<pair<KAnim::Frame::Element, AnimationSymbolMetadata>> temp;
 
@@ -606,40 +606,41 @@ static void exportAnimationFrame(xml_node mainline, AnimationExporterState &s, A
 //        const BuildSymbolMetadata &symmeta = symmeta_match->second;
 
         AnimationSymbolMetadata &animsymmeta = animmeta.initializeChild(s.timeline_id, start_time, elem);
-        pair<KAnim::Frame::Element, AnimationSymbolMetadata> t(elem, animsymmeta);
-        temp.push_back(t);
+
+        exportAnimationFrameElement(mainline_key, local_s, animsymmeta,/* symmeta,*/ elem);
+
+//        pair<KAnim::Frame::Element, AnimationSymbolMetadata> t(elem, animsymmeta);
+//        temp.push_back(t);
     }
 
-    for (std::vector<pair<KAnim::Frame::Element, AnimationSymbolMetadata>>::iterator it = temp.end() - 1;
-         it >= temp.begin(); it--) {
-        exportAnimationFrameElement(mainline_key, local_s, it->second,/* symmeta,*/ it->first);
-        if (it == temp.begin())
-            break;
-    }
+//    for (std::vector<pair<KAnim::Frame::Element, AnimationSymbolMetadata>>::iterator it = temp.end() - 1;
+//         it >= temp.begin(); it--) {
+//        exportAnimationFrameElement(mainline_key, local_s, it->second,/* symmeta,*/ it->first);
+//        if (it == temp.begin())
+//            break;
+//    }
 }
 
 static void
 exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &s, AnimationSymbolMetadata &animsymmeta,
         /*const BuildSymbolMetadata &symmeta,*/ const KAnim::Frame::Element &elem) {
     const uint32_t object_ref_id = s.object_ref_id++;
-//    const uint32_t z_index = s.z_index--;
-    const uint32_t z_index = s.z_index++;
+    const uint32_t z_index = s.z_index--;
+//    const uint32_t z_index = s.z_index++;
 
-    const uint32_t build_frame = elem.getBuildFrame();
-
+//    const uint32_t build_frame = elem.getBuildFrame();
 //    const BuildSymbolFrameMetadata &bframemeta = symmeta.getFrameMetadata(build_frame);
 
     //const uint32_t build_frame = elem.getBuildFrame();
 
-
     // Sanity checking.
-//    {
-//        float_type sort_order = elem.getAnimSortOrder();
-//        if (sort_order < s.last_sort_order) {
-//            throw logic_error("Program logic state invariant breached: anim sort order progression is not monotone.");
-//        }
-//        s.last_sort_order = sort_order;
-//    }
+    {
+        float_type sort_order = elem.getAnimSortOrder();
+        if (sort_order < s.last_sort_order) {
+            throw logic_error("Program logic state invariant breached: anim sort order progression is not monotone.");
+        }
+        s.last_sort_order = sort_order;
+    }
 
 //    cout << "Exporting animation frame element " << elem.getName() << ", build frame " << elem.getBuildFrame()
 //         << ", key id " << animsymmeta.getTimelineId() << endl;
@@ -670,17 +671,11 @@ exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &
 
 
 struct matrix_components {
-
-
     float_type scale_x, scale_y;
     float_type angle;
     int spin;
 
-    matrix_components() :
-            scale_x(1),
-            scale_y(1),
-            angle(0),
-            spin(1) {}
+    matrix_components() : scale_x(1), scale_y(1), angle(0), spin(0) {}
 };
 
 // sup entry-wise norm
@@ -772,7 +767,7 @@ static void decomposeMatrix(const MatrixType &M, matrix_components &ret, matrix_
     last.angle = ret.angle;
 }
 
-/*
+/*b
  * Exports the corresponding animation timeline of a build symbol.
  */
 static void
@@ -813,8 +808,8 @@ exportAnimationSymbolTimeline(const BuildSymbolMetadata &symmeta, const Animatio
         xml_node timeline_key = timeline.append_child("key");
 
         timeline_key.append_attribute("id") = key_id++;//build_frame; // This changed for deduplication.
-        timeline_key.append_attribute(
-                "time") = animsymframemeta.getStartTime();//tomilli(frame_duration*bframemeta.duration);//tomilli(frame_duration*bframemeta.duration);
+        timeline_key.append_attribute("time") = animsymframemeta.getStartTime();
+        //tomilli(frame_duration*bframemeta.duration);//tomilli(frame_duration*bframemeta.duration);
 
 
         const matrix_type &M = animsymframemeta.getMatrix();
@@ -825,7 +820,6 @@ exportAnimationSymbolTimeline(const BuildSymbolMetadata &symmeta, const Animatio
         matrix_components geo;
         decomposeMatrix(M, geo, last_result, is_first);
 
-
         if (options::check_animation_fidelity) {
             float_type md = matrix_dist(M, scaleMatrix(geo.scale_x, geo.scale_y) * rotationMatrix(geo.angle));
             if (md > MATRIX_EPS && (symbol_badness == nil || symbol_badness.value() < md)) {
@@ -833,16 +827,13 @@ exportAnimationSymbolTimeline(const BuildSymbolMetadata &symmeta, const Animatio
             }
         }
 
-
         float_type angle = geo.angle;
         if (angle < 0) {
             angle += 2 * M_PI;
         }
         angle *= 180.0 / M_PI;
 
-
         timeline_key.append_attribute("spin") = geo.spin;
-
 
         xml_node object = timeline_key.append_child("object");
 
