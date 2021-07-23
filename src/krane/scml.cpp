@@ -353,7 +353,7 @@ static void exportAnimationFrame(xml_node mainline, AnimationExporterState &s, A
 
 static void
 exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &s, AnimationSymbolMetadata &animsymmeta,
-                            const BuildSymbolMetadata &symmeta, const KAnim::Frame::Element &elem);
+        /*const BuildSymbolMetadata &symmeta,*/ const KAnim::Frame::Element &elem);
 
 static void
 exportAnimationSymbolTimeline(const BuildSymbolMetadata &symmeta, const AnimationSymbolMetadata &animsymmeta);
@@ -543,6 +543,7 @@ exportAnimation(xml_node entity, AnimationBankExporterState &s, const BuildMetad
     animation.append_attribute("id") = animation_id;
     animation.append_attribute("name") = A.getFullName().c_str(); // BUILD_PLAYER ?
     animation.append_attribute("length") = tomilli(A.getDuration());
+    animation.append_attribute("interval") = "100";
 
     xml_node mainline = animation.append_child("mainline");
 
@@ -589,7 +590,9 @@ static void exportAnimationFrame(xml_node mainline, AnimationExporterState &s, A
 
     //cout << "Exporting animation frame " << key_id << endl;
 
-    AnimationFrameExporterState local_s(key_id, int(frame.elements.size()));
+    AnimationFrameExporterState local_s(key_id, 0/*int(frame.elements.size())*/);
+
+    vector<pair<KAnim::Frame::Element, AnimationSymbolMetadata>> temp;
 
     for (KAnim::Frame::elementlist_t::const_iterator elemit = frame.elements.begin();
          elemit != frame.elements.end(); ++elemit) {
@@ -600,35 +603,43 @@ static void exportAnimationFrame(xml_node mainline, AnimationExporterState &s, A
             continue;
         }
 
-        const BuildSymbolMetadata &symmeta = symmeta_match->second;
+//        const BuildSymbolMetadata &symmeta = symmeta_match->second;
 
         AnimationSymbolMetadata &animsymmeta = animmeta.initializeChild(s.timeline_id, start_time, elem);
+        pair<KAnim::Frame::Element, AnimationSymbolMetadata> t(elem, animsymmeta);
+        temp.push_back(t);
+    }
 
-        exportAnimationFrameElement(mainline_key, local_s, animsymmeta, symmeta, elem);
+    for (std::vector<pair<KAnim::Frame::Element, AnimationSymbolMetadata>>::iterator it = temp.end() - 1;
+         it >= temp.begin(); it--) {
+        exportAnimationFrameElement(mainline_key, local_s, it->second,/* symmeta,*/ it->first);
+        if (it == temp.begin())
+            break;
     }
 }
 
 static void
 exportAnimationFrameElement(xml_node mainline_key, AnimationFrameExporterState &s, AnimationSymbolMetadata &animsymmeta,
-                            const BuildSymbolMetadata &symmeta, const KAnim::Frame::Element &elem) {
+        /*const BuildSymbolMetadata &symmeta,*/ const KAnim::Frame::Element &elem) {
     const uint32_t object_ref_id = s.object_ref_id++;
-    const uint32_t z_index = s.z_index--;
+//    const uint32_t z_index = s.z_index--;
+    const uint32_t z_index = s.z_index++;
 
     const uint32_t build_frame = elem.getBuildFrame();
 
-    const BuildSymbolFrameMetadata &bframemeta = symmeta.getFrameMetadata(build_frame);
+//    const BuildSymbolFrameMetadata &bframemeta = symmeta.getFrameMetadata(build_frame);
 
     //const uint32_t build_frame = elem.getBuildFrame();
 
 
     // Sanity checking.
-    {
-        float_type sort_order = elem.getAnimSortOrder();
-        if (sort_order < s.last_sort_order) {
-            throw logic_error("Program logic state invariant breached: anim sort order progression is not monotone.");
-        }
-        s.last_sort_order = sort_order;
-    }
+//    {
+//        float_type sort_order = elem.getAnimSortOrder();
+//        if (sort_order < s.last_sort_order) {
+//            throw logic_error("Program logic state invariant breached: anim sort order progression is not monotone.");
+//        }
+//        s.last_sort_order = sort_order;
+//    }
 
 //    cout << "Exporting animation frame element " << elem.getName() << ", build frame " << elem.getBuildFrame()
 //         << ", key id " << animsymmeta.getTimelineId() << endl;
@@ -840,8 +851,10 @@ exportAnimationSymbolTimeline(const BuildSymbolMetadata &symmeta, const Animatio
                 animsymframemeta.getBuildFrame());//build_frame;//animsymframemeta.getBuildFrame();
         object.append_attribute("x") = trans[0];
         object.append_attribute("y") = -trans[1];
-        object.append_attribute("scale_x") = geo.scale_x;
-        object.append_attribute("scale_y") = geo.scale_y;
+        if (geo.scale_x != 1.0)
+            object.append_attribute("scale_x") = geo.scale_x;
+        if (geo.scale_y != 1.0)
+            object.append_attribute("scale_y") = geo.scale_y;
         object.append_attribute("angle") = angle;
     }
 
